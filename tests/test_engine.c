@@ -388,6 +388,40 @@ static void test_sink(void) {
     api->destroy_instance(in);
 }
 
+/* v0.1.0 on hardware: raising DECAY or BLUR made the sound DISAPPEAR
+ * (narrowing resonators, cancelling smear taps), and SINK went silent. The
+ * playing level must hold across both knobs, and SINK must keep sounding. */
+static void test_levels_hold(void) {
+    const char *keys[2] = {"decay", "blur"};
+    fill_drums(A, SEC(8), 0.7f);
+    for (int k = 0; k < 2; ++k) {
+        double lo = 1e9, hi = 0;
+        for (int s = 0; s <= 4; ++s) {
+            void *in = make(1.0f);
+            api->set_param(in, "state", "{\"version\":1,\"mix\":1,\"depth\":0.7,\"tone\":0.35,\"decay\":0.55,"
+                                        "\"motion\":0.4,\"blur\":0.5,\"feedback\":0.35,\"dark\":0.4,\"sink\":0}");
+            setp(in, keys[k], s * 0.25);
+            run(in, A, B, SEC(8));
+            double r = rms_of(B, SEC(2), SEC(8));
+            if (r < lo) lo = r;
+            if (r > hi) hi = r;
+            api->destroy_instance(in);
+        }
+        char what[96];
+        snprintf(what, sizeof(what), "%s 0..100 %%: playing level spread (dB, < 4)", keys[k]);
+        check(db(hi) - db(lo) < 4.0, what, db(hi) - db(lo));
+    }
+    /* SINK pressed on the last hit: still clearly sounding 5-6 s later */
+    void *in = make(1.0f);
+    run(in, A, B, SEC(6));
+    double before = rms_of(B, SEC(4), SEC(6));
+    setp(in, "sink", 1);
+    run(in, NULL, B, SEC(6));
+    double after = rms_of(B, SEC(5), SEC(6));
+    check(db(after) - db(before) > -20.0, "SINK on the last hit: 5-6 s later still within 20 dB (dB)", db(after) - db(before));
+    api->destroy_instance(in);
+}
+
 /* Every knob slammed 0 -> 1 -> 0 under steady material: no clicks. */
 static void test_zipper(void) {
     const char *keys[8] = {"mix", "depth", "tone", "decay", "motion", "blur", "feedback", "dark"};
@@ -487,6 +521,7 @@ int main(void) {
     test_noise();
     test_sink();
     test_zipper();
+    test_levels_hold();
     test_state();
     test_nan_guard();
     test_stability(0);

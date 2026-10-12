@@ -35,17 +35,27 @@
 
 /* Calibration (set from the renders: wet RMS close to the input's at the
  * defaults, see README "Levels"). */
-#define SM_EXC_GAIN    6.0f     /* excitation into the bank (outside the loop) */
-#define SM_NOISE_GAIN  9.0f     /* the twice-low-passed noise is quiet */
-#define SM_EARLY_GAIN  1.4f
-#define SM_TAIL_GAIN   1.0f
-#define SM_WET_GAIN    2.4f
+#ifndef SM_EXC_GAIN
+#define SM_EXC_GAIN    6.0f
+#endif     /* excitation into the bank (outside the loop) */
+#ifndef SM_NOISE_GAIN
+#define SM_NOISE_GAIN  9.0f
+#endif     /* the twice-low-passed noise is quiet */
+#ifndef SM_EARLY_GAIN
+#define SM_EARLY_GAIN  1.0f
+#endif
+#ifndef SM_TAIL_GAIN
+#define SM_TAIL_GAIN   2.5f
+#endif
+#ifndef SM_WET_GAIN
+#define SM_WET_GAIN    1.3f
+#endif
 #define SM_KNEE        0.9f     /* safety knee starts at -0.9 dBFS */
 
 static const float k_tau[SM_P_COUNT] = {
     0.03f,  /* mix (and ramped per sample on top) */
     0.10f,  /* depth */
-    0.70f,  /* tone: slow, so it never glides like a pitch bend */
+    0.30f,  /* tone: smooth, but quick enough to hear the knob */
     0.50f,  /* decay */
     0.25f,  /* motion */
     0.15f,  /* blur */
@@ -144,7 +154,7 @@ float sm_engine_get(const sm_engine *e, int param) {
 void sm_engine_snap(sm_engine *e) {
     for (int i = 0; i < SM_P_COUNT; ++i) e->s[i] = e->p[i];
     e->tone_log = logf(sm_tone_hz(e->p[SM_P_TONE]));
-    e->sink_amt = e->sink_deep = e->p[SM_P_SINK];
+    e->sink_amt = e->sink_deep = e->sink_fb = e->p[SM_P_SINK];
     float m = e->p[SM_P_MIX];
     e->dry_g = m >= 1.0f ? 0.0f : cosf(m * SM_PI * 0.5f);
     e->wet_g = sinf(m * SM_PI * 0.5f);
@@ -166,13 +176,16 @@ static void control(sm_engine *e, int frames, float *dry_to, float *wet_to) {
     float up_a = dt / 3.5f, up_d = dt / 9.0f, down = dt / 2.0f;
     e->sink_amt += sink > e->sink_amt ? fminf(up_a, sink - e->sink_amt) : -fminf(down, e->sink_amt - sink);
     e->sink_deep += sink > e->sink_deep ? fminf(up_d, sink - e->sink_deep) : -fminf(down, e->sink_deep - sink);
+    /* The loop is held FIRST (~0.4 s), so whatever is sounding when the pad
+     * is pressed keeps sounding while the input fades out behind it. */
+    e->sink_fb += sink > e->sink_fb ? fminf(dt / 0.4f, sink - e->sink_fb) : -fminf(down, e->sink_fb - sink);
     const float sa = e->sink_amt, sd = e->sink_deep;
 
     const float depth = e->s[SM_P_DEPTH];
     const float motion = e->s[SM_P_MOTION];
     const float blur = e->s[SM_P_BLUR];
     const float dark = sm_clampf(e->s[SM_P_DARK] + (1.0f - e->s[SM_P_DARK]) * 0.75f * sd, 0.0f, 1.0f);
-    const float fb = e->s[SM_P_FEEDBACK] + fmaxf(0.0f, 0.985f - e->s[SM_P_FEEDBACK]) * sa;
+    const float fb = e->s[SM_P_FEEDBACK] + fmaxf(0.0f, 0.985f - e->s[SM_P_FEEDBACK]) * e->sink_fb;
     const float decay_s = sm_decay_s(e->s[SM_P_DECAY]);
 
     /* TONE glides in the log domain, slowly; SINK pulls it ~18 % down. */
@@ -191,7 +204,7 @@ static void control(sm_engine *e, int frames, float *dry_to, float *wet_to) {
     const float *w_line = wv + 3 * SM_NRES;
 
     /* Resonator bank: modes ring 0.15..1.8 s; the long tail is the FDN's. */
-    const float res_t60 = fminf(1.8f, 0.12f + 0.28f * decay_s);
+    const float res_t60 = 0.35f + 0.25f * e->s[SM_P_DECAY];
     float weight[SM_NRES], pan[SM_NRES];
     for (int i = 0; i < SM_NRES; ++i) {
         float md = sm_res_mod_depth[i] * motion;
@@ -246,7 +259,7 @@ static void control(sm_engine *e, int frames, float *dry_to, float *wet_to) {
         e->w_energy = 0.5f + 3.5f * d;
         e->w_tnoise = (1.0f + 4.0f * d) * (1.0f - 0.6f * dark) * (1.0f - sa);
         e->w_sub = 0.25f * d;   /* a seasoning: more and it reads as an octave-down */
-        e->exc_gain = SM_EXC_GAIN * (1.0f - 0.97f * sa);
+        e->exc_gain = SM_EXC_GAIN * (1.0f - 0.85f * sa);
         e->direct_w = 0.35f * powf(keep, 1.5f) * (1.0f - 0.9f * sa);
         /* Transient suppression: the thump gets rounder with DEPTH and DARK. */
         float th_hz = (70.0f - 35.0f * d) * (1.0f - 0.4f * dark);
@@ -297,6 +310,9 @@ static int process_chunk(sm_engine *e, const float *in, float *out, int n) {
     const int pure_dry = dry0 == 1.0f && dry_to == 1.0f && wet0 == 0.0f && wet_to == 0.0f;
 
     const float bd = e->bank_drive, inv_bd = 1.0f / bd;
+    /* The field is loud enough to carry on its own (SINK relies on it); a
+     * long DECAY accumulates more, so it is trimmed back a little there. */
+    const float tail_g = SM_TAIL_GAIN * (1.0f - 0.45f * e->s[SM_P_DECAY]);
     float peak = 0.0f, check = 0.0f;   /* check: NaN/Inf anywhere ends up here */
 
     for (int t = 0; t < n; ++t) {
@@ -354,8 +370,8 @@ static int process_chunk(sm_engine *e, const float *in, float *out, int n) {
 
         float tl = 0.5f * (o[0] + o[2]);
         float tr = 0.5f * (o[1] - o[3]);
-        float wl = SM_EARLY_GAIN * vl + SM_TAIL_GAIN * tl;
-        float wr = SM_EARLY_GAIN * vr + SM_TAIL_GAIN * tr;
+        float wl = SM_EARLY_GAIN * vl + tail_g * tl;
+        float wr = SM_EARLY_GAIN * vr + tail_g * tr;
 
         /* output: dark LP, DC, mono lows, safety */
         wl = sm_biquad_run(&e->out_sub[0], sm_biquad_run(&e->out_lp[0], wl));

@@ -33,7 +33,7 @@ const LEDS_PER_TICK = 8;                 /* 32 pads repainted every 4 frames */
 
 /* The same two mappings as dsp/submerge_params.h (tests/test_ui.mjs pins
  * them against values computed by the built DSP). */
-export const toneHz = (t) => 35 * Math.pow(65 / 35, t);
+export const toneHz = (t) => 30 * Math.pow(120 / 30, t);
 export const decaySeconds = (d) => 0.3 * Math.pow(25 / 0.3, d);
 
 export function formatValue(fullKey, raw) {

@@ -115,7 +115,7 @@ let agree = true;
 for (const [v, hz] of Object.entries(contract.tone_hz)) if (Math.abs(toneHz(Number(v)) - hz) > 0.01) agree = false;
 for (const [v, s] of Object.entries(contract.decay_s)) if (Math.abs(decaySeconds(Number(v)) - s) > 0.01) agree = false;
 check(agree, "TONE Hz / DECAY s mappings match the DSP's at 0, 25, 50, 75, 100 %");
-check(formatValue("synth:tone", "0") === "35 Hz" && formatValue("synth:tone", "1") === "65 Hz", "TONE reads in Hz");
+check(formatValue("synth:tone", "0") === "30 Hz" && formatValue("synth:tone", "1") === "120 Hz", "TONE reads in Hz");
 check(formatValue("synth:decay", "0") === "0.3 s" && formatValue("synth:decay", "1") === "25 s"
       && formatValue("synth:decay", "0.75") === "8.3 s", "DECAY reads in seconds");
 check(formatValue("synth:feedback", "0.96") === "96%" && formatValue("synth:mix", "0") === "0%", "the rest read in %");

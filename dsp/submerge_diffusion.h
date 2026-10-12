@@ -59,7 +59,9 @@ static inline float sm_diff_chan_run(sm_diff_chan *c, int pos, float coef, float
     float taps = 0.0f;
     for (int k = 0; k < SM_SMEAR_TAPS; ++k)
         taps += c->smear[(pos - c->tap[k]) & (SM_SMEAR_SIZE - 1)];
-    x += smear * (taps * (1.0f / SM_SMEAR_TAPS) - x);
+    /* 1/sqrt(taps), not 1/taps: the copies are largely uncorrelated, so an
+     * average lost ~6 dB as BLUR rose. */
+    x += smear * (taps * 0.5f - x);
     return sm_lp1_run(&c->damp2, sm_lp1_run(&c->damp1, x));
 }
 

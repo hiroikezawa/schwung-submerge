@@ -35,6 +35,7 @@ typedef struct {
     float s[SM_P_COUNT];
     float tone_log;                 /* smoothed log(fundamental) */
     float sink_amt, sink_deep;      /* the SINK transition, 0..1 each */
+    float sink_fb;                  /* SINK's hold on the loop (fast) */
 
     /* per-sample ramped mix gains */
     float dry_g, wet_g;

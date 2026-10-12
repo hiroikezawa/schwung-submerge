@@ -20,7 +20,7 @@
         "2 DEPTH how far the",
         "  sound is turned",
         "  into rumble",
-        "3 TONE 35..65 Hz",
+        "3 TONE 30..120 Hz",
         "4 DECAY 0.3..25 s",
         "5 MOTION 6 BLUR",
         "7 FEEDBACK 8 DARK"

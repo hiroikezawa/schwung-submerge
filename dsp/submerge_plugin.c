@@ -109,7 +109,7 @@ static int restore_state(sm_engine *e, const char *text) {
             /* The knobs jump to the saved values; the SOUND still starts from
              * silence (no buffers are saved) and SINK ramps in as it would. */
             sm_engine_snap(e);
-            e->sink_amt = e->sink_deep = 0.0f;
+            e->sink_amt = e->sink_deep = e->sink_fb = 0.0f;
             return 1;
         }
         if (*p++ != ',') return 0;

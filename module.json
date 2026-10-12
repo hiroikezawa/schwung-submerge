@@ -2,7 +2,7 @@
   "id": "submerge",
   "name": "SUBMERGE",
   "abbrev": "SUBMG",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turns any input into a low, dark field: the attack and timbre dissolve into sub rumble, underground resonance and slowly moving low-frequency ambience. DEPTH TONE DECAY MOTION BLUR FEEDBACK DARK, a SINK pad and an equal-power MIX",
   "author": "Hiro Ikezawa",
   "api_version": 2,

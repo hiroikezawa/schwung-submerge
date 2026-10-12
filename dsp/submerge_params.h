@@ -17,7 +17,7 @@
 enum {
     SM_P_MIX,       /* equal-power dry/wet */
     SM_P_DEPTH,     /* how far the input is turned into a low field */
-    SM_P_TONE,      /* resonator bank centre, 35..65 Hz fundamental (log) */
+    SM_P_TONE,      /* resonator bank centre, 30..120 Hz fundamental (log) */
     SM_P_DECAY,     /* 0.3..25 s (log) */
     SM_P_MOTION,    /* irregular slow movement */
     SM_P_BLUR,      /* diffusion / smearing */
@@ -45,8 +45,8 @@ static const sm_param_info SM_PARAMS[SM_P_COUNT] = {
     {"sink",     0.0f, 1.0f, 0.0f,  1},
 };
 
-#define SM_TONE_LO_HZ 35.0f
-#define SM_TONE_HI_HZ 65.0f
+#define SM_TONE_LO_HZ 30.0f
+#define SM_TONE_HI_HZ 120.0f
 #define SM_DECAY_LO_S 0.3f
 #define SM_DECAY_HI_S 25.0f
 
