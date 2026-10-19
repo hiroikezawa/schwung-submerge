@@ -23,17 +23,15 @@ static double now_us(void) {
 static sm_engine e;
 
 int main(void) {
-    const struct { const char *name; float v[8]; int sink; } cfg[] = {
-        {"defaults", {0.5f, 0.7f, 0.35f, 0.55f, 0.4f, 0.5f, 0.35f, 0.4f}, 0},
-        {"all 100 %", {1, 1, 1, 1, 1, 1, 1, 1}, 0},
-        {"all 100 % + SINK", {1, 1, 1, 1, 1, 1, 1, 1}, 1},
+    const struct { const char *name; float v[8]; } cfg[] = {
+        {"defaults", {0.5f, 0.7f, 49.0f, 3.4f, 0.4f, 0.5f, 0.35f, 0.4f}},
+        {"all max", {1, 1, 120, 25, 1, 1, 1, 1}},
     };
     int16_t buf[256];
     uint32_t rng = 1;
     for (unsigned c = 0; c < sizeof(cfg) / sizeof(cfg[0]); ++c) {
         sm_engine_init(&e, 44100.0f);
         for (int p = 0; p < 8; ++p) sm_engine_set(&e, p, cfg[c].v[p]);
-        sm_engine_set(&e, SM_P_SINK, (float)cfg[c].sink);
         sm_engine_snap(&e);
         double worst = 0, total = 0;
         const int warm = 400, n = 3445;   /* ~10 s measured */

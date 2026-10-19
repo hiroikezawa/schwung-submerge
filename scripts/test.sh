@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every test: native engine tests (plain and ASan/UBSan), UI tests against
+# Every test: native engine tests (plain and ASan/UBSan), the knob grid against
 # Schwung's real page engine, the Move build with its ABI check, the device
 # benchmark binary, and the licence scan.
 #
@@ -22,7 +22,7 @@ echo "== the same under AddressSanitizer + UBSan"
   "$MODULE/tests/test_engine.c" "${SRC[@]}" -lm -o "$MODULE/build/native/test-engine-asan"
 ASAN_OPTIONS=detect_leaks=1 "$MODULE/build/native/test-engine-asan" | grep -E "FAIL|PASSED|FAILURE"
 
-echo "== UI tests (Schwung's real page engine)"
+echo "== knob grid test (Schwung's real page engine)"
 # The page engine: a mirror of the device's shared/ in build/device-shared if
 # there is one (scp -r ableton@move.local:/data/UserData/schwung/shared
 # build/device-shared/), else the ../schwung checkout. The framebuffer harness
@@ -34,11 +34,11 @@ SHARED="${SM_SHARED:-}"
 if [[ ! -f "$ROOT/tools/param-pages/harness.mjs" ]]; then
   echo "SKIP: no Schwung checkout at $ROOT (set SCHWUNG_ROOT)" >&2
 elif command -v node >/dev/null 2>&1; then
-  SM_SHARED="$SHARED" SCHWUNG_ROOT="$ROOT" node "$MODULE/tests/test_ui.mjs"
+  SM_SHARED="$SHARED" SCHWUNG_ROOT="$ROOT" node "$MODULE/tests/test_grid.mjs"
 else
   NODE=node.exe; command -v node.exe >/dev/null 2>&1 || NODE="/mnt/c/Program Files/nodejs/node.exe"
   SM_SHARED="${SHARED:+$(wslpath -w "$SHARED")}" SCHWUNG_ROOT="$(wslpath -w "$ROOT")" \
-    WSLENV="SM_SHARED:SCHWUNG_ROOT" "$NODE" "$(wslpath -w "$MODULE/tests/test_ui.mjs")"
+    WSLENV="SM_SHARED:SCHWUNG_ROOT" "$NODE" "$(wslpath -w "$MODULE/tests/test_grid.mjs")"
 fi
 
 echo "== Move build (arm64) + ABI"

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Write what the built submerge.so serves to the UI (grid_hierarchy, the
-values, and the TONE/DECAY display mappings at several knob positions) to
-build/native/contract.json, so tests/test_ui.mjs runs against the DSP's real
-answers rather than a copy.
+"""Write what the built submerge.so serves to the shadow UI (ui_hierarchy,
+chain_params, the values) to build/native/contract.json, so tests/test_grid.mjs
+runs Schwung's standard knob grid against the DSP's real answers.
 
 Copyright (c) 2026 Hiro Ikezawa. MIT License (see LICENSE).
 """
@@ -28,7 +27,6 @@ lib.move_audio_fx_init_v2.restype = c.POINTER(API)
 api = lib.move_audio_fx_init_v2(c.byref(Host(1, 44100, 128))).contents
 create = c.CFUNCTYPE(c.c_void_p, c.c_char_p, c.c_char_p)(api.create)
 get = c.CFUNCTYPE(c.c_int, c.c_void_p, c.c_char_p, c.c_char_p, c.c_int)(api.get)
-put = c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_char_p)(api.set)
 inst = create(b"", None)
 
 
@@ -38,16 +36,9 @@ def read(key):
     return None if n < 0 else buf.value.decode()
 
 
-keys = ["mix", "depth", "tone", "decay", "motion", "blur", "feedback", "dark", "sink"]
-out = {"grid_hierarchy": read("grid_hierarchy"), "ui_hierarchy": read("ui_hierarchy"),
-       "chain_params": read("chain_params"), "values": {k: read(k) for k in keys},
-       "tone_hz": {}, "decay_s": {}}
-for v in ("0", "0.25", "0.5", "0.75", "1"):
-    put(inst, b"tone", v.encode())
-    put(inst, b"decay", v.encode())
-    out["tone_hz"][v] = float(read("tone_hz"))
-    out["decay_s"][v] = float(read("decay_s"))
-json.loads(out["grid_hierarchy"])
-assert out["ui_hierarchy"] == "", "ui_hierarchy must be served empty"
+keys = ["mix", "depth", "tone", "decay", "motion", "blur", "feedback", "dark"]
+out = {"ui_hierarchy": read("ui_hierarchy"), "chain_params": read("chain_params"),
+       "values": {k: read(k) for k in keys}}
+assert json.loads(out["ui_hierarchy"])["levels"]["root"]["knobs"] == keys, "ui_hierarchy must list the 8 knobs"
 pathlib.Path(sys.argv[2]).write_text(json.dumps(out, indent=1))
 print("contract dumped:", sys.argv[2])

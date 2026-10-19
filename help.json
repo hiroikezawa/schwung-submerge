@@ -52,26 +52,12 @@
       ]
     },
     {
-      "title": "Sink",
+      "title": "Where",
       "lines": [
-        "Top-right pad toggles",
-        "SINK (violet); the",
-        "header says SINK.",
-        "New input fades out,",
-        "the field gets darker",
-        "and lower and keeps",
-        "going. Off: back to",
-        "normal in ~2 s."
-      ]
-    },
-    {
-      "title": "Pads",
-      "lines": [
-        "While this screen is",
-        "open the pads belong",
-        "to SUBMERGE: only the",
-        "top-right one is used.",
-        "Back gives them back."
+        "Works in a track",
+        "slot and in Master FX",
+        "(also Send / bus",
+        "inserts)."
       ]
     }
   ]

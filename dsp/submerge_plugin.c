@@ -29,10 +29,9 @@ typedef struct {
 static sm_slot g_pool[SM_POOL];
 static int g_host_rate = 44100;
 
-static const char *const k_sink_names[2] = {"OFF", "ON"};
-
-/* The knob grid ui_chain.js draws with Schwung's page engine: one page, the
- * eight knobs in order. SINK is not on it: it is the top-right pad. */
+/* Schwung's standard knob grid, one page, the eight knobs in order. Served
+ * as ui_hierarchy, so the shadow UI opens it in a track slot AND in Master
+ * FX (which opens nothing for a module without one). */
 static const char k_hierarchy[] =
     "{\"modes\":null,\"levels\":{"
       "\"root\":{\"label\":\"SUBMERGE\","
@@ -51,18 +50,8 @@ static const char *skip_space(const char *p) {
     return p;
 }
 
-/* A value is a number, or (SINK) OFF/ON in any case. */
-static int parse_value(int index, const char *text, float *out) {
+static int parse_value(const char *text, float *out) {
     const char *p = skip_space(text);
-    if (index == SM_P_SINK) {
-        for (int i = 0; i < 2; ++i) {
-            size_t n = strlen(k_sink_names[i]);
-            if (!strncasecmp(p, k_sink_names[i], n) && !*skip_space(p + n)) {
-                *out = (float)i;
-                return 1;
-            }
-        }
-    }
     char *end;
     float v = strtof(p, &end);
     if (end == p || *skip_space(end) || !isfinite(v)) return 0;
@@ -71,11 +60,14 @@ static int parse_value(int index, const char *text, float *out) {
 }
 
 /* Flat JSON object of numbers. Every parameter must be present; unknown keys
- * (from a later version) are skipped. Nothing is applied unless all is valid. */
+ * (from a later version, or 0.1.x's "sink") are skipped. Nothing is applied
+ * unless all is valid. Version 1 (0.1.x) stored TONE and DECAY as 0..1 knob
+ * positions; they are converted to Hz and seconds. */
 static int restore_state(sm_engine *e, const char *text) {
     if (strlen(text) > 2048) return 0;
     float next[SM_P_COUNT];
     unsigned seen = 0;
+    float version = 1.0f;
     const char *p = skip_space(text);
     if (*p++ != '{') return 0;
     for (int field = 0; field < 64; ++field) {
@@ -100,16 +92,20 @@ static int restore_state(sm_engine *e, const char *text) {
             next[idx] = v;
         } else if (!strcmp(key, "version")) {
             if (v < 1.0f) return 0;
+            version = v;
         }
         p = skip_space(p);
         if (*p == '}') {
             if (*skip_space(p + 1)) return 0;
             if (seen != (1u << SM_P_COUNT) - 1) return 0;
+            if (version < 2.0f) {
+                next[SM_P_TONE] = 30.0f * powf(4.0f, sm_clampf(next[SM_P_TONE], 0.0f, 1.0f));
+                next[SM_P_DECAY] = 0.3f * powf(25.0f / 0.3f, sm_clampf(next[SM_P_DECAY], 0.0f, 1.0f));
+            }
             for (int i = 0; i < SM_P_COUNT; ++i) sm_engine_set(e, i, next[i]);
             /* The knobs jump to the saved values; the SOUND still starts from
-             * silence (no buffers are saved) and SINK ramps in as it would. */
+             * silence (no buffers are saved). */
             sm_engine_snap(e);
-            e->sink_amt = e->sink_deep = e->sink_fb = 0.0f;
             return 1;
         }
         if (*p++ != ',') return 0;
@@ -164,7 +160,7 @@ static void set_param(void *instance, const char *key, const char *val) {
     }
     int idx = param_index(key);
     float v;
-    if (idx < 0 || !parse_value(idx, val, &v)) return;
+    if (idx < 0 || !parse_value(val, &v)) return;
     sm_engine_set(e, idx, v);
 }
 
@@ -174,37 +170,20 @@ static int get_param(void *instance, const char *key, char *buf, int size) {
     const sm_engine *e = (const sm_engine *)instance;
     int n = -1;
     int idx = param_index(key);
-    if (idx == SM_P_SINK) {
-        return copy_text(buf, size, k_sink_names[e->p[SM_P_SINK] >= 0.5f]);
-    } else if (idx >= 0) {
+    if (idx >= 0) {
         n = snprintf(buf, size, "%.4f", e->p[idx]);
     } else if (!strcmp(key, "name")) {
         return copy_text(buf, size, "SUBMERGE");
     } else if (!strcmp(key, "chain_params")) {
         return copy_text(buf, size, kChainParams);
     } else if (!strcmp(key, "ui_hierarchy")) {
-        /* Served, and EMPTY on purpose: no hierarchy is what makes the shadow
-         * UI open ui_chain.js, which draws Schwung's own knob grid from
-         * grid_hierarchy AND takes the pads for SINK (the stock grid runs no
-         * module code). An error here would read as a failed read. */
-        return 0;
-    } else if (!strcmp(key, "grid_hierarchy")) {
         return copy_text(buf, size, k_hierarchy);
     } else if (!strcmp(key, "state")) {
         n = snprintf(buf, size,
-            "{\"version\":1,\"mix\":%.6g,\"depth\":%.6g,\"tone\":%.6g,\"decay\":%.6g,"
-            "\"motion\":%.6g,\"blur\":%.6g,\"feedback\":%.6g,\"dark\":%.6g,\"sink\":%d}",
+            "{\"version\":2,\"mix\":%.6g,\"depth\":%.6g,\"tone\":%.6g,\"decay\":%.6g,"
+            "\"motion\":%.6g,\"blur\":%.6g,\"feedback\":%.6g,\"dark\":%.6g}",
             e->p[SM_P_MIX], e->p[SM_P_DEPTH], e->p[SM_P_TONE], e->p[SM_P_DECAY],
-            e->p[SM_P_MOTION], e->p[SM_P_BLUR], e->p[SM_P_FEEDBACK], e->p[SM_P_DARK],
-            e->p[SM_P_SINK] >= 0.5f ? 1 : 0);
-    } else if (!strcmp(key, "tone_hz")) {
-        /* What the TONE knob means (ui_core.mjs shows the same number). */
-        n = snprintf(buf, size, "%.3f", sm_tone_hz(e->p[SM_P_TONE]));
-    } else if (!strcmp(key, "decay_s")) {
-        n = snprintf(buf, size, "%.3f", sm_decay_s(e->p[SM_P_DECAY]));
-    } else if (!strcmp(key, "sink_level")) {
-        /* How far the SINK transition has gone, 0..1 (diagnostic). */
-        n = snprintf(buf, size, "%.3f", e->sink_amt);
+            e->p[SM_P_MOTION], e->p[SM_P_BLUR], e->p[SM_P_FEEDBACK], e->p[SM_P_DARK]);
     } else if (!strcmp(key, "version")) {
         return copy_text(buf, size, kVersion);
     } else if (!strcmp(key, "nan_resets")) {
@@ -226,7 +205,7 @@ static audio_fx_api_v2_t g_api = {
     process_block,
     set_param,
     get_param,
-    NULL,   /* on_midi: SINK is a pad on the module's own screen */
+    NULL,   /* on_midi: not used */
 };
 
 __attribute__((visibility("default")))

@@ -19,7 +19,7 @@ import tarfile
 root = pathlib.Path(__file__).resolve().parent.parent
 errors = []
 ours = [p for p in (root / "dsp").glob("*.[ch]")] + list((root / "tests").glob("*")) + \
-       list((root / "scripts").glob("*")) + [root / "ui_core.mjs", root / "ui_chain.js"]
+       list((root / "scripts").glob("*"))
 for f in sorted(ours):
     if f.is_file() and f.suffix in (".c", ".h", ".mjs", ".js", ".py", ".sh"):
         if "Copyright (c) 2026 Hiro Ikezawa" not in f.read_text(errors="replace"):

@@ -51,7 +51,7 @@ static const char *getp(void *in, const char *k) {
     return b;
 }
 static void extreme(void *in) {
-    setp(in, "depth", 1); setp(in, "decay", 1); setp(in, "motion", 1);
+    setp(in, "depth", 1); setp(in, "decay", 25); setp(in, "tone", 120); setp(in, "motion", 1);
     setp(in, "blur", 1); setp(in, "feedback", 1); setp(in, "dark", 1);
 }
 
@@ -135,8 +135,8 @@ static void fill_drums(float *buf, long frames, float amp) {
 static void test_dry(void) {
     /* A saved MIX 0 restores exactly (no ramp from the default). */
     void *in = api->create_instance("", NULL);
-    api->set_param(in, "state", "{\"version\":1,\"mix\":0,\"depth\":1,\"tone\":0.5,\"decay\":1,"
-                                "\"motion\":1,\"blur\":1,\"feedback\":1,\"dark\":0.5,\"sink\":0}");
+    api->set_param(in, "state", "{\"version\":2,\"mix\":0,\"depth\":1,\"tone\":60,\"decay\":25,"
+                                "\"motion\":1,\"blur\":1,\"feedback\":1,\"dark\":0.5}");
     fill_drums(A, SEC(4), 0.8f);
     for (long i = 0; i < SEC(4); ++i) { A[2 * i] += 0.1f * sig_noise(); A[2 * i + 1] += 0.1f * sig_noise(); }
     run(in, A, B, SEC(4));
@@ -215,10 +215,9 @@ static void test_wet(void) {
 }
 
 /* Ten minutes at every knob on 100 %, fed drums, sines, noise and silence. */
-static void test_stability(int sink) {
+static void test_stability(void) {
     void *in = make(1.0f);
     extreme(in);
-    if (sink) setp(in, "sink", 1);
     double worst_peak = 0;
     int nonfinite = 0;
     long chunk = SEC(30);
@@ -236,12 +235,12 @@ static void test_stability(int sink) {
         if (p > worst_peak) worst_peak = p;
     }
     char what[96];
-    snprintf(what, sizeof(what), "10 min all-100%%%s: no NaN reset (count)", sink ? " + SINK" : "");
+    snprintf(what, sizeof(what), "10 min all-100%%: no NaN reset (count)");
     check(atoi(getp(in, "nan_resets")) == 0 && nonfinite == 0, what, atof(getp(in, "nan_resets")));
     double gov = atof(getp(in, "governor"));
-    snprintf(what, sizeof(what), "10 min all-100%%%s: governor finite, in 0..1", sink ? " + SINK" : "");
+    snprintf(what, sizeof(what), "10 min all-100%%: governor finite, in 0..1");
     check(isfinite(gov) && gov >= 0 && gov <= 1, what, gov);
-    snprintf(what, sizeof(what), "10 min all-100%%%s: worst output peak (<= 1)", sink ? " + SINK" : "");
+    snprintf(what, sizeof(what), "10 min all-100%%: worst output peak (<= 1)");
     check(worst_peak <= 1.0, what, worst_peak);
     /* afterwards, silence: it must fade, not hold or grow */
     run(in, NULL, B, SEC(60));
@@ -327,70 +326,9 @@ static void test_noise(void) {
     }
 }
 
-/* SINK: new hits count for less, the tail gets darker and longer; off
- * returns within ~3 s, without a click. */
-static void test_sink(void) {
-    long n = SEC(40);
-    memset(A, 0, sizeof(float) * 2 * (size_t)n);
-    sig_rng = 5;
-    for (long at = 0; at < SEC(30); at += SEC(1)) {   /* a chord-ish hit every second */
-        sig_chord(A, (int)n, (int)at, FS, 0.7f);
-        sig_kick(A, (int)n, (int)at, FS, 0.5f);
-    }
-    /* reference run, SINK off */
-    void *ref = make(1.0f);
-    run(ref, A, B, n);
-    double ref_hits = rms_of(B, SEC(14), SEC(20));
-    double ref_hi = high_share(B, SEC(14), SEC(20));
-    api->destroy_instance(ref);
-    static float C[2 * 44100 * 40];
-    memcpy(C, B, sizeof(float) * 2 * (size_t)n);
-
-    void *in = make(1.0f);
-    run(in, A, B, SEC(8));
-    setp(in, "sink", 1);
-    run(in, A + 2 * SEC(8), B + 2 * SEC(8), SEC(22));
-    double s_hits = rms_of(B, SEC(14), SEC(20));
-    double s_hi = high_share(B, SEC(14), SEC(20));
-    check(atof(getp(in, "sink_level")) > 0.99, "SINK on: transition complete after a few s (level)", atof(getp(in, "sink_level")));
-    check(s_hi < 0.6 * ref_hi, "SINK on: darker (share above 300 Hz vs SINK off, ratio)", s_hi / (ref_hi + 1e-12));
-    /* input contribution: how much each new hit lifts the field. Measure the
-     * RMS rise in the 300 ms after hits vs the 300 ms before, relative. */
-    double lift_ref = 0, lift_sink = 0;
-    for (int h = 14; h < 20; ++h) {
-        lift_ref += rms_of(C, SEC(h), SEC(h + 0.3)) / (rms_of(C, SEC(h - 0.3), SEC(h)) + 1e-9);
-        lift_sink += rms_of(B, SEC(h), SEC(h + 0.3)) / (rms_of(B, SEC(h - 0.3), SEC(h)) + 1e-9);
-    }
-    check(lift_sink / 6 < lift_ref / 6 - 0.05 || lift_sink / 6 < 1.05,
-          "SINK on: a new hit lifts the field less (lift ratio, SINK)", lift_sink / 6);
-    (void)s_hits; (void)ref_hits;
-    /* tail: stop the input at 30 s, compare the decay over 30..40 s */
-    run(in, NULL, B + 2 * SEC(30), SEC(10));
-    double sink_tail = db(rms_of(B, SEC(37), SEC(40))) - db(rms_of(B, SEC(30.5), SEC(33.5)));
-    double ref_tail = db(rms_of(C, SEC(37), SEC(40))) - db(rms_of(C, SEC(30.5), SEC(33.5)));
-    check(sink_tail > ref_tail + 6.0, "SINK on: the tail lasts longer (dB lost over ~6 s, SINK)", sink_tail);
-    printf("      (same, SINK off: %.1f dB)\n", ref_tail);
-    /* off: smooth way back. A click is judged against the same input
-     * through an instance that never sank (the normal state is brighter, so
-     * its steps are naturally bigger than the sunk state's). */
-    sig_rng = 11;
-    sig_pink(A, (int)SEC(12), 0.4f);
-    void *norm = make(1.0f);
-    run(norm, A, C, SEC(12));
-    double normal = max_step(C, SEC(6), SEC(12));
-    api->destroy_instance(norm);
-    run(in, A, B, SEC(6));
-    setp(in, "sink", 0);
-    run(in, A + 2 * SEC(6), B + 2 * SEC(6), SEC(6));
-    check(atof(getp(in, "sink_level")) == 0.0, "SINK off: back to normal within ~2-3 s (level after 6 s)", atof(getp(in, "sink_level")));
-    double during = max_step(B, SEC(6), SEC(12));
-    check(during < 1.5 * normal, "SINK off: no click (largest step vs never-sunk, ratio)", during / (normal + 1e-9));
-    api->destroy_instance(in);
-}
-
 /* v0.1.0 on hardware: raising DECAY or BLUR made the sound DISAPPEAR
- * (narrowing resonators, cancelling smear taps), and SINK went silent. The
- * playing level must hold across both knobs, and SINK must keep sounding. */
+ * (narrowing resonators, cancelling smear taps). The playing level must
+ * hold across both knobs. */
 static void test_levels_hold(void) {
     const char *keys[2] = {"decay", "blur"};
     fill_drums(A, SEC(8), 0.7f);
@@ -398,9 +336,10 @@ static void test_levels_hold(void) {
         double lo = 1e9, hi = 0;
         for (int s = 0; s <= 4; ++s) {
             void *in = make(1.0f);
-            api->set_param(in, "state", "{\"version\":1,\"mix\":1,\"depth\":0.7,\"tone\":0.35,\"decay\":0.55,"
-                                        "\"motion\":0.4,\"blur\":0.5,\"feedback\":0.35,\"dark\":0.4,\"sink\":0}");
-            setp(in, keys[k], s * 0.25);
+            api->set_param(in, "state", "{\"version\":2,\"mix\":1,\"depth\":0.7,\"tone\":49,\"decay\":3.4,"
+                                        "\"motion\":0.4,\"blur\":0.5,\"feedback\":0.35,\"dark\":0.4}");
+            /* DECAY in seconds, log-spaced 0.3..25 s like the old knob */
+            setp(in, keys[k], k == 0 ? 0.3 * pow(25.0 / 0.3, s * 0.25) : s * 0.25);
             run(in, A, B, SEC(8));
             double r = rms_of(B, SEC(2), SEC(8));
             if (r < lo) lo = r;
@@ -411,33 +350,25 @@ static void test_levels_hold(void) {
         snprintf(what, sizeof(what), "%s 0..100 %%: playing level spread (dB, < 4)", keys[k]);
         check(db(hi) - db(lo) < 4.0, what, db(hi) - db(lo));
     }
-    /* SINK pressed on the last hit: still clearly sounding 5-6 s later */
-    void *in = make(1.0f);
-    run(in, A, B, SEC(6));
-    double before = rms_of(B, SEC(4), SEC(6));
-    setp(in, "sink", 1);
-    run(in, NULL, B, SEC(6));
-    double after = rms_of(B, SEC(5), SEC(6));
-    check(db(after) - db(before) > -20.0, "SINK on the last hit: 5-6 s later still within 20 dB (dB)", db(after) - db(before));
-    api->destroy_instance(in);
 }
 
 /* Every knob slammed 0 -> 1 -> 0 under steady material: no clicks. */
 static void test_zipper(void) {
     const char *keys[8] = {"mix", "depth", "tone", "decay", "motion", "blur", "feedback", "dark"};
+    const double lo[8] = {0, 0, 30, 0.3, 0, 0, 0, 0}, hi[8] = {1, 1, 120, 25, 1, 1, 1, 1};
     for (int k = 0; k < 8; ++k) {
         void *in = make(0.5f);
         sig_rng = 3;
         sig_pink(A, (int)SEC(6), 0.4f);
         run(in, A, B, SEC(2));
         double base = max_step(B, SEC(1), SEC(2));
-        setp(in, keys[k], 1);
+        setp(in, keys[k], hi[k]);
         run(in, A + 2 * SEC(2), B + 2 * SEC(2), SEC(2));
-        setp(in, keys[k], 0);
+        setp(in, keys[k], lo[k]);
         run(in, A + 2 * SEC(4), B + 2 * SEC(4), SEC(2));
         double jump = max_step(B, SEC(2), SEC(6));
         char what[96];
-        snprintf(what, sizeof(what), "%-8s 0<->1 jumps: largest step vs steady state (ratio < 3)", keys[k]);
+        snprintf(what, sizeof(what), "%-8s min<->max jumps: largest step vs steady state (ratio < 3)", keys[k]);
         check(jump < 3.0 * base + 0.002, what, jump / (base + 1e-9));
         api->destroy_instance(in);
     }
@@ -445,26 +376,33 @@ static void test_zipper(void) {
 
 static void test_state(void) {
     void *a = make(0.31f);
-    setp(a, "depth", 0.12); setp(a, "tone", 0.9); setp(a, "decay", 0.05);
+    setp(a, "depth", 0.12); setp(a, "tone", 97); setp(a, "decay", 12.5);
     setp(a, "motion", 0.66); setp(a, "blur", 0.77); setp(a, "feedback", 0.98);
-    setp(a, "dark", 0.2); api->set_param(a, "sink", "ON");
+    setp(a, "dark", 0.2);
     char st[1024];
     snprintf(st, sizeof(st), "%s", getp(a, "state"));
     void *b = make(0.5f);
     api->set_param(b, "state", st);
     char st2[1024];
     snprintf(st2, sizeof(st2), "%s", getp(b, "state"));
-    check(!strcmp(st, st2), "state round trip (all 8 knobs + SINK)", 0);
+    check(!strcmp(st, st2), "state round trip (all 8 knobs)", 0);
     printf("      %s\n", st);
-    check(!strcmp(getp(b, "sink"), "ON"), "  SINK restored ON", 0);
+    /* a 0.1.x state: TONE/DECAY as 0..1 knob positions, plus a SINK */
+    void *c = make(0.5f);
+    api->set_param(c, "state", "{\"version\":1,\"mix\":0.4,\"depth\":0.7,\"tone\":0.5,\"decay\":1,"
+                                "\"motion\":0.4,\"blur\":0.5,\"feedback\":0.35,\"dark\":0.4,\"sink\":1}");
+    check(fabs(atof(getp(c, "tone")) - 60.0) < 0.01 && fabs(atof(getp(c, "decay")) - 25.0) < 0.01
+          && fabs(atof(getp(c, "mix")) - 0.4) < 1e-4,
+          "  0.1.x state loads: TONE 0.5 -> 60 Hz, DECAY 1 -> 25 s, SINK ignored", atof(getp(c, "tone")));
+    api->destroy_instance(c);
     api->set_param(b, "state", "{\"version\":1,\"mix\":0.2}");
     check(!strcmp(getp(b, "state"), st2), "  incomplete state rejected whole", 0);
     api->set_param(b, "state", "garbage");
     api->set_param(b, "mix", "nan");
     api->set_param(b, "mix", "7");
     check(!strcmp(getp(b, "mix"), "1.0000"), "  out-of-range clamps, NaN ignored", atof(getp(b, "mix")));
-    check(!strcmp(getp(b, "ui_hierarchy"), "") && strstr(getp(b, "grid_hierarchy"), "\"feedback\",\"dark\"]") != NULL,
-          "ui_hierarchy empty (opens ui_chain.js), grid_hierarchy has the 8 knobs", 0);
+    check(strstr(getp(b, "ui_hierarchy"), "\"knobs\":[\"mix\",\"depth\",\"tone\",\"decay\",\"motion\",\"blur\",\"feedback\",\"dark\"]") != NULL,
+          "ui_hierarchy served with the 8 knobs (standard grid; opens in Master FX)", 0);
     check(strstr(getp(b, "chain_params"), "\"key\":\"mix\"") != NULL, "chain_params served", 0);
     api->destroy_instance(a);
     api->destroy_instance(b);
@@ -519,13 +457,11 @@ int main(void) {
     test_impulse();
     test_sines();
     test_noise();
-    test_sink();
     test_zipper();
     test_levels_hold();
     test_state();
     test_nan_guard();
-    test_stability(0);
-    test_stability(1);
+    test_stability();
     if (failures) { printf("%d FAILURE(S)\n", failures); return 1; }
     puts("ALL ENGINE TESTS PASSED");
     return 0;

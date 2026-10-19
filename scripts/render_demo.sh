@@ -3,7 +3,7 @@
 # SUBMERGE on the desktop and write WAVs (dry + processed) and PNGs (level
 # envelopes + 0-600 Hz spectrogram) to build/renders/<preset>/.
 #
-#   scripts/render_demo.sh            three presets: default, deep, sink-ish
+#   scripts/render_demo.sh            three presets: default, deep, shallow
 #   scripts/render_demo.sh name k=v   one custom preset, e.g. depth=1 dark=0.8
 #
 # Copyright (c) 2026 Hiro Ikezawa. MIT License (see LICENSE).
@@ -30,7 +30,7 @@ if [[ $# -gt 0 ]]; then
   render "$@"
 else
   render default
-  render deep depth=1 decay=0.75 feedback=0.8 dark=0.7 motion=0.6 blur=0.8
-  render shallow depth=0 dark=0.2 decay=0.4
+  render deep depth=1 decay=8.3 feedback=0.8 dark=0.7 motion=0.6 blur=0.8
+  render shallow depth=0 dark=0.2 decay=1.7
 fi
 echo "WAVs and PNGs in $OUT"

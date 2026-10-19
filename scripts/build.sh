@@ -25,6 +25,9 @@ esac
 GEN="$MODULE/build/generated"
 OBJ="$MODULE/build/obj-$TARGET"
 rm -rf "$OBJ"
+# The package directory is rebuilt from nothing: a file dropped from the module
+# (0.2.0 removed ui_chain.js) must not ride along from an earlier build.
+[[ "$TARGET" == arm64 ]] && rm -rf "$OUT" "$MODULE/dist/$ID-module.tar.gz"
 mkdir -p "$OUT" "$GEN" "$OBJ"
 python3 "$MODULE/scripts/metadata.py" "$GEN"
 
@@ -51,7 +54,7 @@ fi
 cp "$MODULE/module.json" "$OUT/"
 if [[ "$TARGET" == arm64 ]]; then
   python3 "$MODULE/scripts/check_abi.py" "$OUT/$ID.so"
-  for f in ui_chain.js ui_core.mjs help.json README.md LICENSE THIRD_PARTY_LICENSES.md; do
+  for f in help.json README.md LICENSE THIRD_PARTY_LICENSES.md; do
     cp "$MODULE/$f" "$OUT/"
   done
   tar -czf "$MODULE/dist/$ID-module.tar.gz" -C "$MODULE/dist" "$ID"
