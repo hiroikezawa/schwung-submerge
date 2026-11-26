@@ -207,11 +207,11 @@ Move 実機（2026-10-20、v0.2.0、通常優先度・コア 0–2 に固定し�
 （処理量はブロックごとにほぼ一定の設計です）。再測定は：
 
 ```bash
-scp -i ~/.ssh/move_key build/bench-device-arm64 ableton@192.168.1.42:/data/UserData/
+scp build/bench-device-arm64 ableton@move.local:/data/UserData/
 ```
 
 ```bash
-ssh -i ~/.ssh/move_key ableton@192.168.1.42 "taskset 0x7 /data/UserData/bench-device-arm64"
+ssh ableton@move.local "taskset 0x7 /data/UserData/bench-device-arm64"
 ```
 
 ## リアルタイム安全性
@@ -271,7 +271,7 @@ submerge.so: ELF 64-bit LSB shared object, ARM aarch64, 73 KB (text 26 KB, bss 3
 ## インストール
 
 ```bash
-python3 scripts/install.py http://192.168.1.42:7700
+python3 scripts/install.py http://move.local:7700
 ```
 
 Schwung Manager の `install-custom` 経由でアップロードします。インストール後は Move を再起動してください。
