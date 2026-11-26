@@ -4,6 +4,11 @@
 
 A fully original Audio FX module for Schwung on Ableton Move.
 
+> **Move's built-in speaker reproduces almost none of the low end.** SUBMERGE's
+> output (the wet) is nearly all below 200 Hz, so on the built-in speaker the
+> sound can seem quieter and thinner the higher MIX goes. Listen on headphones or
+> on monitors that can reproduce bass.
+
 Rather than putting a reverb or delay on the input, it erases the input's
 outline, timbre and attack and turns it into **ground rumble, the reverberation
 of an underground space, distant low frequencies, lumps of rolling low end and
